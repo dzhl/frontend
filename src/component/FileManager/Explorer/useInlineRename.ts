@@ -1,7 +1,8 @@
 import { enqueueSnackbar } from "notistack";
 import React, { useCallback, useContext, useEffect, useRef, useState } from "react";
+import { useHotkeys } from "react-hotkeys-hook";
 import { FileType } from "../../../api/explorer.ts";
-import { useAppDispatch } from "../../../redux/hooks.ts";
+import { useAppDispatch, useAppSelector } from "../../../redux/hooks.ts";
 import { fileDoubleClicked, inlineRenameSubmit } from "../../../redux/thunks/file.ts";
 import { DefaultCloseAction } from "../../Common/Snackbar/snackbar.tsx";
 import { getActionOpt } from "../ContextMenu/useActionDisplayOpt.ts";
@@ -23,6 +24,11 @@ export function useInlineRename({ file, isSelected, uploading, isTouch }: UseInl
   const [editValue, setEditValue] = useState("");
   const renameTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const isSoleSelected = useAppSelector(
+    (state) =>
+      !!state.fileManager[fmIndex].selected[file.path] && Object.keys(state.fileManager[fmIndex].selected).length === 1,
+  );
 
   // Clear rename timer on unmount
   useEffect(() => {
@@ -68,14 +74,21 @@ export function useInlineRename({ file, isSelected, uploading, isTouch }: UseInl
   }, [isSelected, isEditing]);
 
   const enterEditMode = useCallback(() => {
+    const displayOpt = getActionOpt([file]);
+    if (!displayOpt.showRename) {
+      return;
+    }
     setIsEditing(true);
     setEditValue(file.name);
-  }, [file.name]);
+  }, [file]);
+
+  const canRename = isSoleSelected && !uploading && !isEditing;
+  useHotkeys("f2", enterEditMode, { enabled: canRename, preventDefault: true }, [enterEditMode, canRename]);
 
   const onNameClick = useCallback(
     (e: React.MouseEvent<HTMLElement>) => {
       const displayOpt = getActionOpt([file]);
-      if (!isSelected || !displayOpt.showRename || uploading || isTouch || e.ctrlKey || e.metaKey || e.shiftKey) {
+      if (!displayOpt.showRename || !canRename || isTouch || e.ctrlKey || e.metaKey || e.shiftKey) {
         return;
       }
       e.stopPropagation();
@@ -84,7 +97,7 @@ export function useInlineRename({ file, isSelected, uploading, isTouch }: UseInl
       }
       renameTimerRef.current = setTimeout(enterEditMode, 500);
     },
-    [file, isSelected, uploading, isTouch, enterEditMode],
+    [file, canRename, isTouch, enterEditMode],
   );
 
   const onNameDoubleClick = useCallback(
